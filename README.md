@@ -43,6 +43,17 @@ curl -L --fail -o data/raw/UNSW_NB15_testing-set.csv 'https://huggingface.co/dat
 
 For the files used in the saved run, the SHA-256 hashes are `bec7dd5ec88dc2a0ccc7a07879d338395ed7421750f675fd0339e07dfe0648fa` (training) and `734fe6642edf758f7c94d7d9149426b49d202fe8e7bf0bef47392489c3c0a559` (testing). The raw CSVs are excluded from Git.
 
+## Data and selected columns
+
+Each row represents a network connection (flow) from UNSW-NB15, which includes normal traffic and simulated attack traffic. The notebook uses a compact subset of the CSV columns:
+
+- **Traffic measurements:** `dur`, `spkts`, `dpkts`, `sbytes`, `dbytes`, `rate`, `sttl`, `dttl`, `sload`, `dload`, `sloss`, and `dloss` describe flow duration, packets and bytes in each direction, traffic rates, time-to-live values, and packet loss.
+- **Recent-connection counts:** `ct_srv_src`, `ct_dst_ltm`, `ct_src_dport_ltm`, `ct_dst_sport_ltm`, and `ct_dst_src_ltm` summarize recent activity involving services, hosts, and ports.
+- **Connection categories:** `proto`, `service`, and `state` identify the protocol, service, and connection state.
+- **Project signals:** three readable rule flags, an Isolation Forest anomaly score, and a connection-concentration score are added by the notebook and shared with the classifiers.
+
+`label` is the binary target (normal or attack); `attack_cat` is kept for the final missed-category review, and `id` is a row identifier. None of these three columns is a classifier input. The published CSVs contain additional fields outside this selected feature set.
+
 ## Notebook order
 
 | Sections | What happens |
