@@ -4,7 +4,7 @@
 
 Can three understandable detection signals help trained models identify attack-labeled network flows, and how much extra review work is required to recover attacks that the selected model misses?
 
-This project deliberately matches the structure of [Explainable AML Transaction Monitoring](https://github.com/codewithdaniel1/Explainable-AML-Transaction-Monitoring): one notebook, separately evaluated detection tracks, three classifier alternatives, a held-out alert comparison, model explanations, and a report of missed labels. Its single use case is **network-flow attack detection**.
+This one-notebook project evaluates three detection tracks, three classifier alternatives, held-out alerts, model explanations, and missed attack labels. Its single use case is **network-flow attack detection**.
 
 ## Architecture at a glance
 

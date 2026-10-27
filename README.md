@@ -1,6 +1,6 @@
 # Explainable Cyber Threat Defense Workbench
 
-A **one-notebook MVP** using a public network-flow dataset. It follows the research format of [Explainable AML Transaction Monitoring](https://github.com/codewithdaniel1/Explainable-AML-Transaction-Monitoring): three detection tracks, three alternative classifiers, a held-out alert comparison, explanations, and a candid report.
+A **one-notebook MVP** using a public network-flow dataset. It compares three detection tracks, three alternative classifiers, held-out alerts, model explanations, and missed attack labels.
 
 ## Which file should I read?
 
@@ -23,7 +23,7 @@ python3.11 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-In VS Code, open `cyber_threat_modeling.ipynb`, select the `.venv` interpreter, and run cells from top to bottom. The notebook in this repository includes the results of a full run on both published split files.
+In VS Code, open `cyber_threat_modeling.ipynb`, choose `.venv/bin/python` as the notebook kernel, and run cells from top to bottom. The notebook in this repository includes the results of a full run on both published split files.
 
 ## Get the data
 
