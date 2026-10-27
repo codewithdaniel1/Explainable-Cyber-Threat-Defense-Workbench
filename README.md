@@ -9,7 +9,7 @@ A **one-notebook MVP** using a public network-flow dataset. It compares three de
 | [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) | Start here for the research question, architecture, data split, and metric definitions. |
 | [cyber_threat_modeling.ipynb](cyber_threat_modeling.ipynb) | Run the full analysis in order. Code, tables, charts, and saved outputs are together. |
 | [docs/FINDINGS.md](docs/FINDINGS.md) | Read the measured results, alert tradeoffs, missed attack categories, and limitations. |
-| [docs/Cyber_Threat_Defense_Expert_Briefing.pdf](docs/Cyber_Threat_Defense_Expert_Briefing.pdf) | Read a concise briefing on the benchmark, results, review tradeoffs, and limitations. |
+| [docs/Cyber_Threat_Defense_Expert_Briefing.pdf](docs/Cyber_Threat_Defense_Expert_Briefing.pdf) | View the slide-style briefing on model results, alert workload, detection signals, and missed attack categories. |
 
 The project asks: **Can readable rules, anomaly detection, and connection-count signals help explainable models identify attack-labeled network flows at a manageable review volume?** It uses [UNSW-NB15](https://research.unsw.edu.au/projects/unsw-nb15-dataset), a cyber-range dataset with normal and simulated attack traffic. This is a benchmark experiment, not a deployed security product.
 
