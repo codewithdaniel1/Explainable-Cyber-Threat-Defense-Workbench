@@ -28,7 +28,7 @@ Known-risk-only has extremely high precision on this test set but almost no macr
 | 5% | Novelty only | 7.2% | 6.3% | 63.7% | 37.7 |
 | 5% | Two-lane 75/25 | 2.5% | 10.3% | 93.2% | 7.1 |
 | 10% | Known-risk only | 0.2% | 22.3% | 100.0% | 0.03 |
-| 10% | Novelty only | 14.1% | 13.1% | 67.5% | 67.4 |
+| 10% | Novelty only | 13.3% | 13.1% | 67.6% | 67.2 |
 | 10% | Two-lane 75/25 | 4.6% | 19.8% | 91.1% | 18.5 |
 | 20% | Known-risk only | 0.4% | 45.1% | 99.5% | 2.0 |
 | 20% | Novelty only | 41.1% | 29.3% | 75.4% | 102.1 |
