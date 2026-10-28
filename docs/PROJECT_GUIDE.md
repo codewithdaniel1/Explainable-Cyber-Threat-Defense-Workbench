@@ -1,64 +1,86 @@
-# Explainable Cyber Threat Defense Workbench: project guide
+# Project guide: open-world network-flow triage
 
 ## Research question
 
-Can three understandable detection signals help trained models identify attack-labeled network flows, and how much extra review work is required to recover attacks that the selected model misses?
+When an attack category is absent from training, can a normal-only novelty score surface it in a fixed-size review queue, and what is the trade-off against known-attack ranking and benign review volume?
 
-This one-notebook project evaluates three detection tracks, three classifier alternatives, held-out alerts, model explanations, and missed attack labels. Its single use case is **network-flow attack detection**.
+This is a small, transparent benchmark on UNSW-NB15. Its contribution is the controlled comparison of triage policies under the same review budget. It does not claim a new detector or a production-ready SOC design.
 
-## Architecture at a glance
+## Why evaluate open-world detection?
+
+A closed-set classifier learns from the labels available to it. Real network monitoring can encounter behavior outside those examples, so research evaluates unknown-class recognition, novelty scoring, and continual adaptation. These topics are active: for example, 2025 work studies open-world network intrusion detection with recognition and inspection, while SPIDER studies semi-supervised continual learning under distribution shifts ([ORI, IEEE 2025](https://ieeexplore.ieee.org/document/11159092/); [SPIDER, IEEE INFOCOM 2024](https://newslab.iith.ac.in/publications/spider-a-semi-supervised-continual-learning-based-network-intrusion-detection-system/)).
+
+Here the unknown-category setup is deliberately narrow and reproducible. UNSW-NB15 categories are held out as benchmark classes; they are not literal zero-day events or a complete taxonomy of real threat families.
+
+## System design
 
 ```mermaid
 flowchart LR
-    A[UNSW-NB15 network flows] --> B[Raw flow and connection-count features]
-    B --> R[Three fixed rules]
-    B --> I[Isolation Forest novelty score]
-    B --> C[Connection concentration score]
-    B --> M[Three alternative classifiers]
-    R --> M
-    I --> M
-    C --> M
-    R --> E[Standalone alert comparison]
-    I --> E
-    C --> E
-    M --> E
-    E --> X[Missed-attack audit and explanations]
+    A[UNSW-NB15 train and test flows] --> B[Audit exact input overlap]
+    B --> C[Leave one attack category out]
+    C --> D[Known-risk XGBoost<br/>normal + seen attack categories]
+    C --> E[Isolation Forest<br/>normal training flows only]
+    D --> F[Fixed review budget]
+    E --> F
+    F --> G1[Known-risk only queue]
+    F --> G2[Novelty only queue]
+    F --> G3[75/25 two-lane queue]
+    G1 --> H[Reveal held-out labels for scoring]
+    G2 --> H
+    G3 --> H
+    H --> I[Held-out recall, known recall,<br/>precision, benign alerts]
 ```
 
-**Tracks are signals, classifiers are alternatives.** The rule flags and continuous anomaly/concentration scores are model inputs, but each track's own alerts are evaluated separately. Every model scores every eligible validation and test flow.
+### Evaluation protocol
 
-## Data and split
+For each attack category, the notebook removes its attack rows from training and also removes any remaining training row with an identical input fingerprint. The primary test data are fixed across folds after exact train/test input duplicates are removed. The known-risk model sees the binary `label` for normal and seen attack categories, but `attack_cat` is never an input. The Isolation Forest is fit only on normal training flows.
 
-The [dataset authors](https://research.unsw.edu.au/projects/unsw-nb15-dataset) describe cyber-range normal traffic and nine simulated attack types. We use their published 175,341-row training CSV and 82,332-row testing CSV. `label` is the binary target. `attack_cat` is reserved for the final audit. `id` is excluded.
+Each model creates rankings without reading test labels. At each budget, all three policies select the same number of rows:
 
-The published CSVs have no timestamp, so there is no honest chronological split. We keep the published test apart and use a grouped random split within the published training CSV for fit and validation. Grouping by a hash of all input fields keeps identical feature rows on one side of that fit/validation split.
+- **Known-risk only:** top rows by XGBoost attack score.
+- **Novelty only:** top rows by Isolation Forest anomaly score.
+- **Two-lane 75/25:** 75% of slots from known-risk ranking, then 25% from novelty ranking among rows not already selected.
 
-The notebook audits exact duplicates and finds **8,541 published test rows whose input fields match a row in the published training file**. The primary test evaluation excludes those rows, leaving **73,791**. This is a conservative way to remove exact cross-split overlap; it cannot remove all correlation among traffic sessions. There are also 229 groups of identical training inputs with conflicting binary labels, which is a label-quality limitation.
+The 75/25 allocation is a simple benchmark policy. It is not tuned on the held-out test labels. Budgets are 5%, 10%, and 20%; 10% is the main result.
 
-## Detection tracks
+## Data and features
 
-1. **Rules:** three fixed, readable flags for an unanswered multi-packet flow, a repeated source/destination-port pattern, and a short high-rate flow. Their thresholds are illustrative and not tuned on validation or test labels.
-2. **Isolation Forest:** a one-class model fit on **normal-labeled fit rows**. This is a novelty reference, not a fully label-free model over the attack-heavy stream. The standalone alert cutoff is the 90th percentile of validation anomaly scores.
-3. **Connection concentration:** the sum of log-transformed recent-connection counts for source/port and source/destination relationships. The [feature definitions](https://huggingface.co/datasets/Mouwiya/UNSW-NB15/blob/main/NUSW-NB15_features.csv) describe the supplied counts. The standalone cutoff is the 90th percentile of validation scores. This is a simple count signal, not a graph model.
+The [UNSW-NB15 release](https://research.unsw.edu.au/projects/unsw-nb15-dataset) contains cyber-range normal and attack traffic. The published training file has 175,341 flows and the testing file has 82,332. Removing exact input matches from test leaves 73,791 primary test flows.
 
-The three classifiers use 17 selected numeric flow/count fields, `proto`, `service`, and `state`, plus all three rule flags and the two continuous track scores. Logistic regression and XGBoost use preprocessing fit only on the fit split. EBM reads the same underlying fields directly.
+The model uses 17 numeric fields: `dur`, `spkts`, `dpkts`, `sbytes`, `dbytes`, `rate`, `sttl`, `dttl`, `sload`, `dload`, `sloss`, `dloss`, `ct_srv_src`, `ct_dst_ltm`, `ct_src_dport_ltm`, `ct_dst_sport_ltm`, `ct_dst_src_ltm`; and three categorical fields: `proto`, `service`, `state`. The Isolation Forest uses eight numeric flow fields: `dur`, `spkts`, `dpkts`, `sbytes`, `dbytes`, `rate`, `sload`, `dload`.
 
-## Model selection and alert comparison
+`label` is the normal/attack outcome. `attack_cat` defines folds and supports post-ranking evaluation only. `id` is an identifier. All three are excluded from model inputs.
 
-Validation **average precision (AP)** selects the model family. A model score threshold at the validation 90th percentile is then frozen for test; its test alert count can change when score distributions shift. The notebook also gives each model a separate **10% test review budget** as a ranking sensitivity check. This top-N comparison does not use test labels to choose rows.
+## Measures
 
-The main track-versus-model comparison holds workload equal: the selected model ranks exactly as many primary-test flows as the rule union alerts. It then counts extra attack-labeled and normal-labeled flows that each track would add beyond that model queue. A union's higher recall is only useful if its extra review volume is acceptable.
-
-| Metric | Meaning here |
+| Measure | Meaning |
 | --- | --- |
-| AP | How well scores rank attack labels over thresholds. |
-| Precision | Attack-labeled flows divided by alerted flows in this synthetic benchmark. |
-| Recall | Alerted attack-labeled flows divided by all attack-labeled flows. |
-| False-positive rate | Normal-labeled flows alerted divided by all normal-labeled flows. |
-| Alert volume | Count of flow rows sent for review, not distinct incidents or analysts' cases. |
-| Brier score | Mean squared error of predicted probabilities against binary labels; lower is better. |
+| Held-out-category recall | Fraction of examples from the withheld category selected into the queue. |
+| Known-category recall | Fraction of examples from the other attack categories selected. |
+| Overall attack recall | Fraction of all attack-labeled test flows selected. |
+| Precision | Attack-labeled selected flows divided by all selected flows. Dataset-specific. |
+| Normal alerts per 1,000 | Selected normal-labeled flows per 1,000 normal-labeled test flows. |
+| Held-out precision in novelty lane | Held-out-category hits divided by novelty-lane selections. |
 
-## How to read the result
+The notebook reports category-macro averages across categories with at least 100 primary-test examples. The `Worms` category has only 44 primary-test examples and is shown separately rather than included in the supported-category macro.
 
-Read [FINDINGS.md](FINDINGS.md) for measured tables and misses. UNSW-NB15's published split is **attack-heavy**: 68.1% of training rows and 55.1% of published test rows have attack labels. Real security operations often have a very different base rate. The unusually high AP and precision in this experiment should be interpreted as dataset-specific. The repository demonstrates a research workflow and explains the strengths and limits of each detector on this benchmark.
+## How to interpret the benchmark
 
+The 10% primary-budget result shows a tension: novelty-only has the highest supported-category held-out recall (13.3%) but also the most normal alerts (about 67 per 1,000 normal flows). The two-lane policy lowers held-out recall to 4.6%, while reducing normal alerts to about 18.5 per 1,000. Known-risk-only has near-zero macro held-out recall (0.2%) despite very high benchmark precision, illustrating why known attack ranking alone does not answer the unknown-category question.
+
+These are category-macro results on one cyber-range split, not evidence of effectiveness in operational traffic. The 2025 IEEE open-world recognition and inspection paper is a relevant research comparator; the project should be framed as a transparent benchmark and queue-policy study, not as a novel industry architecture.
+
+## Limits
+
+- “Unknown” is a withheld dataset category, not a zero-day event.
+- The published data have no timestamps; there is no temporal or future-drift evaluation.
+- The test set is attack-heavy and cyber-range generated. Precision and alert counts do not transfer directly to a live SOC.
+- `Worms` has low support; category recall is noisy.
+- Exact duplicate filtering addresses exact input matches, not broader dependence among flows.
+- Dataset-provided connection-count fields cannot be rebuilt independently from the published split files.
+
+## Sources
+
+- Moustafa, N. and Slay, J. (2015), “UNSW-NB15: a comprehensive data set for network intrusion detection systems,” [DOI 10.1109/MilCIS.2015.7348942](https://doi.org/10.1109/MilCIS.2015.7348942).
+- “Toward Open-World Network Intrusion Detection via Open Recognition and Inspection,” IEEE 2025, [IEEE Xplore](https://ieeexplore.ieee.org/document/11159092/).
+- “SPIDER: A Semi-Supervised Continual Learning-Based Network Intrusion Detection System,” IEEE INFOCOM 2024, [project page](https://newslab.iith.ac.in/publications/spider-a-semi-supervised-continual-learning-based-network-intrusion-detection-system/).

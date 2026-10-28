@@ -1,19 +1,29 @@
 # Explainable Cyber Threat Defense Workbench
 
-A **one-notebook MVP** using a public network-flow dataset. It compares three detection tracks, three alternative classifiers, held-out alerts, model explanations, and missed attack labels.
+A focused, one-notebook benchmark of **open-world network-flow triage under a fixed review budget**. The experiment withholds one attack category from training at a time, then compares known-attack risk, normal-only novelty scoring, and a two-lane review queue on UNSW-NB15.
 
-## Which file should I read?
+The central question is practical: **when a model has never seen one attack category, which ranking policy finds examples from it, and how much benign traffic enters the review queue?** The project measures that trade-off at 5%, 10%, and 20% review budgets. The 10% budget is the primary comparison.
+
+## Start here
 
 | File | Purpose |
 | --- | --- |
-| [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) | Start here for the research question, architecture, data split, and metric definitions. |
-| [cyber_threat_modeling.ipynb](cyber_threat_modeling.ipynb) | Run the full analysis in order. Code, tables, charts, and saved outputs are together. |
-| [docs/FINDINGS.md](docs/FINDINGS.md) | Read the measured results, alert tradeoffs, missed attack categories, and limitations. |
-| [docs/Cyber_Threat_Defense_Expert_Briefing.pdf](docs/Cyber_Threat_Defense_Expert_Briefing.pdf) | View the slide-style briefing on model results, alert workload, detection signals, and missed attack categories. |
+| [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) | Research question, data fields, split, queue design, and metric definitions. |
+| [cyber_threat_modeling.ipynb](cyber_threat_modeling.ipynb) | Full reproducible analysis, tables, charts, and a local model explanation. |
+| [docs/FINDINGS.md](docs/FINDINGS.md) | Measured open-world results and limitations. |
+| [docs/Cyber_Threat_Defense_Expert_Briefing.pdf](docs/Cyber_Threat_Defense_Expert_Briefing.pdf) | Slide-style briefing on the pattern history, experiment, results, and caveats. |
 
-The project asks: **Can readable rules, anomaly detection, and connection-count signals help explainable models identify attack-labeled network flows at a manageable review volume?** It uses [UNSW-NB15](https://research.unsw.edu.au/projects/unsw-nb15-dataset), a cyber-range dataset with normal and simulated attack traffic. This is a benchmark experiment, not a deployed security product.
+## What the benchmark compares
 
-The three **signals** are fixed rules, an Isolation Forest novelty score, and recent-connection concentration. Logistic regression, XGBoost, and an Explainable Boosting Machine (EBM) are three **alternative classifiers** trained on the same raw inputs plus those signals. Each classifier scores every evaluation flow. The notebook compares the standalone track alerts separately from the selected model's alerts.
+For each of nine leave-one-attack-category-out folds:
+
+1. Withhold that category's labeled training rows and exact duplicate inputs.
+2. Fit an XGBoost known-risk model on normal flows and the remaining attack categories.
+3. Fit an Isolation Forest on normal flows only to rank behavioral novelty.
+4. Rank the same primary test flows using three policies: **known-risk only**, **novelty only**, and a **75/25 two-lane queue** (75% known-risk, 25% novelty among flows not already selected).
+5. Compare held-out-category recall, known-category recall, precision, and normal alerts per 1,000 normal flows at equal queue sizes.
+
+The 75/25 allocation is a transparent design choice, not a claimed industry standard or an optimized result. This is a benchmark of an open-world evaluation and review policy, not a claim that the queue architecture is novel or ready for deployment.
 
 ## Set up
 
@@ -24,16 +34,16 @@ python3.11 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-In VS Code, open `cyber_threat_modeling.ipynb`, choose `.venv/bin/python` as the notebook kernel, and run cells from top to bottom. The notebook in this repository includes the results of a full run on both published split files.
+In VS Code, open `cyber_threat_modeling.ipynb`, select `.venv/bin/python` as the kernel, and run the cells from top to bottom. The committed notebook contains an executed run, including the result tables and figures.
 
 ## Get the data
 
-The [UNSW research page](https://research.unsw.edu.au/projects/unsw-nb15-dataset) describes the dataset and its published train/test partition. Place these files in `data/raw/`:
+The [UNSW-NB15 research page](https://research.unsw.edu.au/projects/unsw-nb15-dataset) describes the dataset and published train/test split. Put these two files in `data/raw/`:
 
 - `UNSW_NB15_training-set.csv` (175,341 flows)
 - `UNSW_NB15_testing-set.csv` (82,332 flows)
 
-The university's current download link may require Microsoft sign-in. The notebook run in this repository used a [public mirror of the same two named CSVs](https://huggingface.co/datasets/Mouwiya/UNSW-NB15-small/tree/6f5f54594dfc80c84264aec4c7cc3d9b162f1e2f):
+The current university download may require Microsoft sign-in. The saved run used a [public mirror of the same named CSVs](https://huggingface.co/datasets/Mouwiya/UNSW-NB15-small/tree/6f5f54594dfc80c84264aec4c7cc3d9b162f1e2f):
 
 ```bash
 mkdir -p data/raw
@@ -41,27 +51,20 @@ curl -L --fail -o data/raw/UNSW_NB15_training-set.csv 'https://huggingface.co/da
 curl -L --fail -o data/raw/UNSW_NB15_testing-set.csv 'https://huggingface.co/datasets/Mouwiya/UNSW-NB15-small/resolve/6f5f54594dfc80c84264aec4c7cc3d9b162f1e2f/UNSW_NB15_testing-set.csv'
 ```
 
-For the files used in the saved run, the SHA-256 hashes are `bec7dd5ec88dc2a0ccc7a07879d338395ed7421750f675fd0339e07dfe0648fa` (training) and `734fe6642edf758f7c94d7d9149426b49d202fe8e7bf0bef47392489c3c0a559` (testing). The raw CSVs are excluded from Git.
+The notebook records file hashes. Raw CSVs are excluded from Git.
 
 ## Data and selected columns
 
-Each row represents a network connection (flow) from UNSW-NB15, which includes normal traffic and simulated attack traffic. The notebook uses a compact subset of the CSV columns:
+Each row is a network connection flow. The model uses 20 columns:
 
-- **Traffic measurements:** `dur`, `spkts`, `dpkts`, `sbytes`, `dbytes`, `rate`, `sttl`, `dttl`, `sload`, `dload`, `sloss`, and `dloss` describe flow duration, packets and bytes in each direction, traffic rates, time-to-live values, and packet loss.
-- **Recent-connection counts:** `ct_srv_src`, `ct_dst_ltm`, `ct_src_dport_ltm`, `ct_dst_sport_ltm`, and `ct_dst_src_ltm` summarize recent activity involving services, hosts, and ports.
-- **Connection categories:** `proto`, `service`, and `state` identify the protocol, service, and connection state.
-- **Project signals:** three readable rule flags, an Isolation Forest anomaly score, and a connection-concentration score are added by the notebook and shared with the classifiers.
+- **Traffic measurements (12):** `dur`, `spkts`, `dpkts`, `sbytes`, `dbytes`, `rate`, `sttl`, `dttl`, `sload`, `dload`, `sloss`, `dloss` describe duration, packet and byte counts, rates, time-to-live values, and packet loss.
+- **Recent connection counts (5):** `ct_srv_src`, `ct_dst_ltm`, `ct_src_dport_ltm`, `ct_dst_sport_ltm`, `ct_dst_src_ltm` summarize activity involving services, hosts, and ports.
+- **Connection categories (3):** `proto`, `service`, and `state` identify protocol, service, and connection state.
 
-`label` is the binary target (normal or attack); `attack_cat` is kept for the final missed-category review, and `id` is a row identifier. None of these three columns is a classifier input. The published CSVs contain additional fields outside this selected feature set.
+`label` is the binary normal/attack target. `attack_cat` is used only to create held-out folds and report category-level results. `id` is a row identifier. None of these three fields is a model input. The Isolation Forest uses eight numeric traffic measurements and is fit only on normal-labeled training flows.
 
-## Notebook order
+## Scope and interpretation
 
-| Sections | What happens |
-| --- | --- |
-| 1–4 | Load data, profile labels, audit exact train/test feature overlap, make a grouped validation split, define shared features. |
-| 5–8 | Evaluate rules, Isolation Forest, and recent-connection concentration as standalone alert sources. |
-| 9–12 | Train three classifiers, select one by validation average precision, and score held-out test flows. |
-| 13–16 | Compare equal-size alert queues, audit missed attack types, explain model scores, and interpret limits. |
+“Unseen attack” means **a labeled UNSW-NB15 attack category withheld from model training**. It is a controlled proxy for unknown behavior, not evidence of zero-day detection. The dataset has no timestamps, so this does not evaluate future-period drift. Exact input matches between the published training and test files are removed from the primary test population; that cannot remove every relationship among flows.
 
-`id`, `label`, and `attack_cat` never enter classifier inputs. Exact test rows whose input features also occur in the published training file are excluded from the **primary** test scorecard. The official partition lacks timestamps, so this experiment cannot establish future-period performance. Attack labels are unusually common in this dataset; precision and alert volume are benchmark measurements, not estimates for a production SOC.
-
+UNSW-NB15 is a cyber-range dataset with a high attack-label share. Precision and benign-alert rates here are specific to this benchmark and should not be read as estimates for a live network. The open-world and unknown-class problem is an active research area; this project makes a bounded, reproducible comparison rather than claiming a new detection algorithm.
